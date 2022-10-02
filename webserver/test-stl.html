@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+	
+    <title>Example 01.02 - First Scene</title>
+    <script type="importmap">
+	  {
+		"imports": {
+		  "three": "./threejs/three.module.js"
+		}
+	  }
+	</script>
+
+    <style>
+        body {
+            /* set margin to 0 and overflow to hidden, to go fullscreen */
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+	<!--script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <meta charset="utf-8"/>
+
+        <title>URDF Viewer Example</title>
+
+        <script src="https://unpkg.com/@webcomponents/webcomponentsjs@2.4.3/webcomponents-bundle.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet"/>
+        <link href="./styles.css" type="text/css" rel="stylesheet" /-->
+		
+</head>
+<body>
+
+<!-- Div which will hold the Output -->
+<div id="WebGL-output">
+</div>
+
+<!--div id="menu">
+            <ul id="urdf-options">
+                <li urdf="../../../urdf/T12/urdf/T12_flipped.URDF" color="#E91E63">ATHLETE</li>
+                <li urdf="../../../urdf/TriATHLETE/urdf/TriATHLETE_flipped.URDF" color="#009688">TriATHLETE</li>
+                <li urdf="../../../urdf/TriATHLETE_Climbing/urdf/TriATHLETE_flipped.URDF" color="#FFB300">TriATHLETE Climbing</li>
+            </ul>
+
+            <div id="controls" class="hidden">
+                <div id="toggle-controls"></div>
+                <div>Drag and drop URDF files or folders! <br/> (Chrome Only)</div>
+                <div id="ignore-joint-limits" class="toggle">Ignore Joint Limits</div>
+                <div id="radians-toggle" class="toggle">Use Radians</div>
+                <div id="autocenter-toggle" class="toggle checked">Autocenter</div>
+                <div id="collision-toggle" class="toggle">Show Collision</div>
+                <div id="do-animate" class="toggle checked">Animate Joints</div>
+                <label>
+                    Up Axis
+                    <select id="up-select">
+                        <option value="+X">+X</option>
+                        <option value="-X">-X</option>
+                        <option value="+Y">+Y</option>
+                        <option value="-Y">-Y</option>
+                        <option value="+Z">+Z</option>
+                        <option value="-Z" selected>-Z</option>
+                    </select>
+                </label>
+                <ul></ul>
+            </div>
+        </div-->
+
+<!-- <div class="navbar"><span>Real-Time Chart with Plotly.js</span></div>
+<div class="wrapper">
+
+	<div id="chart"></div>
+	<script>
+
+		Plotly.plot('chart',[{y:[0],type:'line'},{y:[0],type:'line'},{y:[0],type:'line'},{y:[0],type:'line'},{y:[0],type:'line'},{y:[0],type:'line'}]);
+		
+		var cnt = 0;
+
+	</script>
+</div> -->
+
+
+<!-- Javascript code that runs our Three.js examples -->
+<script type="module">
+
+	import * as THREE from 'three';
+	import URDFLoader from './src/URDFLoader.js';
+	
+	import {
+		WebGLRenderer,
+		PerspectiveCamera,
+		Scene,
+		Mesh,
+		PlaneBufferGeometry,
+		ShadowMaterial,
+		DirectionalLight,
+		SpotLight,
+		PCFSoftShadowMap,
+		sRGBEncoding,
+		Color,
+		AmbientLight,
+		Box3,
+		LoadingManager,
+		MathUtils,
+	} from 'three';
+	import { OrbitControls } from '../threejs/OrbitControls.js';
+
+	
+	let scene, camera, renderer, robot, controls, floorMat;
+	let light1, light2, light3, light4;
+	var loop_count = 0
+	var buffer_idx = 0;
+	var buffer_len = 50;
+	var ang_i = new Array();
+	var buffer = new Array(6);
+
+	for (var i = 0; i < buffer.length; i++) {
+		buffer[i] = new Array(buffer_len);
+		}
+
+	/* WebSocket. */
+	var ws;
+	var connected = false;
+	var needrender = false;
+	var plt;
+	var msg_count = 0;
+	var testing = false;
+	
+	
+	
+	doConnect();
+    init();
+	render();
+	// addPlot();
+
+	
+	// function addPlot()
+	// {
+	// 	plt = Plotly.plot('chart',[{
+	// 		y:[0],
+	// 		type:'line'
+	// 	}]);
+	// }
+
+	/* Establish connection. */
+	function doConnect()
+	{
+		var addr = "ws://" + location.hostname + ":8080"
+
+		/* Message to be sent. */
+		var msg;
+
+		/* Do connection. */
+		ws = new WebSocket(addr);
+		ws.binaryType = 'arraybuffer';
+
+		/* Register events. */
+		ws.onopen = function()
+		{
+			connected = true;
+			console.log("Connection opened\n");
+			ws.send("hello");
+		};
+
+		/* Deals with messages. */
+		ws.onmessage = function (evt)
+		{
+			if(evt.data instanceof ArrayBuffer ){
+				var floatArray = new Float32Array(evt.data);
+				//console.log("Recv: " + evt.data + "\n")
+				//console.log(floatArray)
+				if(robot && (floatArray.length == 6))
+				{
+					//const time = Date.now() * 0.001;
+					//const angle_1 = 0.2*Math.PI*Math.sin(0.1*Math.PI*time);
+					// if(needrender == false)
+					// {
+						for (let i = 1; i <= 6; i++) {
+
+								robot.joints[`joint_${ i }`].setJointValue(floatArray[i-1]);
+								// buffer[i-1][buffer_idx] = floatArray[i-1];
+						}
+						needrender = true;
+						msg_count++;
+					//}
+					
+					// cnt++;
+					// buffer_idx++;
+					//robot.rotation.z += -Math.PI/480;
+					//render();
+				}
+				
+				loop_count++;
+				// if(buffer_idx>=buffer_len)
+				// {
+				// 	//Plotly.extendTraces('chart',{ y:[buffer[0],buffer[1],buffer[2],buffer[3],buffer[4],buffer[5]]}, [0,1,2,3,4,5]);
+				// 	buffer_idx = 0;
+				// }
+				// if(loop_count%1000==0){
+				// 	console.log("loop_count=" + loop_count.toString());
+				// }
+				//ws.send("loop_count=" + loop_count.toString());
+			}
+			else {
+				// text frame
+				var str = evt.data
+				console.log(str);
+				if(str==='test')
+					testing = true
+				else if(str==='stop')
+					testing = false
+			}
+
+		
+		};
+
+		/* Close events. */
+		ws.onclose = function(event)
+		{
+			console.log('Socket is closed. Reconnect will be attempted in 1 second.');
+			setTimeout(function() {
+			  doConnect();
+			}, 1000);
+			connected = false;
+		};
+	}
+	
+	function addFloor() {
+		floorMat = new THREE.MeshStandardMaterial( {
+						roughness: 0.5,
+						color: 0xaaaaaa,
+						metalness: 0.5,
+						bumpScale: 0.002
+					} );
+		const textureLoader = new THREE.TextureLoader();
+		
+		textureLoader.load( 'textures/hardwood2_diffuse.jpg', function ( map ) {
+
+			map.wrapS = THREE.RepeatWrapping;
+			map.wrapT = THREE.RepeatWrapping;
+			map.anisotropy = 4;
+			map.repeat.set( 10, 24 );
+			map.encoding = THREE.sRGBEncoding;
+			floorMat.map = map;
+			floorMat.needsUpdate = true;
+
+		} );
+		
+		textureLoader.load( 'textures/hardwood2_bump.jpg', function ( map ) {
+
+			map.wrapS = THREE.RepeatWrapping;
+			map.wrapT = THREE.RepeatWrapping;
+			map.anisotropy = 4;
+			map.repeat.set( 10, 24 );
+			floorMat.bumpMap = map;
+			floorMat.needsUpdate = true;
+
+		} );
+		textureLoader.load( 'textures/hardwood2_roughness.jpg', function ( map ) {
+
+			map.wrapS = THREE.RepeatWrapping;
+			map.wrapT = THREE.RepeatWrapping;
+			map.anisotropy = 4;
+			map.repeat.set( 10, 24 );
+			floorMat.roughnessMap = map;
+			floorMat.needsUpdate = true;
+
+		} );
+		
+		const floorGeometry = new THREE.PlaneGeometry( 20, 20 );
+		const floorMesh = new THREE.Mesh( floorGeometry, floorMat );
+		floorMesh.receiveShadow = true;
+		floorMesh.rotation.x = - Math.PI / 2.0;
+		scene.add( floorMesh );
+	}
+	
+	function addLight() {
+		const directionalLight = new DirectionalLight(0xffffff, 1.0);
+		directionalLight.castShadow = true;
+		//directionalLight.shadow.mapSize.setScalar(1024);
+		directionalLight.position.set(10, 2, 10);
+		directionalLight.castShadow = false;
+		scene.add(directionalLight);
+
+		const ambientLight = new AmbientLight(0xffffff, 0.0);
+		//scene.add(ambientLight);
+		
+		const spotLight = new THREE.SpotLight( 0xffffff, 2 );
+		spotLight.position.set( 1, 4, 1 );
+		spotLight.angle = Math.PI / 6;
+		spotLight.penumbra = 0.1;
+		//spotLight.decay = 1;
+		spotLight.distance = 100;
+
+		spotLight.castShadow = true;
+		spotLight.shadow.mapSize.setScalar(512);
+		scene.add( spotLight );
+		
+		const bulbGeometry = new THREE.SphereGeometry( 0.02, 16, 8 );
+		const bulbLight = new THREE.PointLight( 0xffee88, 1, 100, 2 );
+
+		const bulbMat = new THREE.MeshStandardMaterial( {
+			emissive: 0xffffee,
+			emissiveIntensity: 1,
+			color: 0x000000
+		} );
+		bulbLight.add( new THREE.Mesh( bulbGeometry, bulbMat ) );
+		bulbLight.position.set( 5, 5, 5 );
+		bulbLight.castShadow = true;
+		//scene.add( bulbLight );
+		//point lights
+		const sphere = new THREE.SphereGeometry( 0.05, 16, 8 );
+		
+		light1 = new THREE.PointLight( 0xffffff, 1, 100, 5 );
+		light1.add( new THREE.Mesh( sphere, new THREE.MeshBasicMaterial( { color: 0xffffff } ) ) );
+		light1.position.set( 1, 0.5, 1 );
+		//scene.add( light1 );
+
+		light2 = new THREE.PointLight( 0xffffff, 1, 100, 5 );
+		light2.add( new THREE.Mesh( sphere, new THREE.MeshBasicMaterial( { color: 0xffffff } ) ) );
+		light2.position.set( 0, 2, 0 );
+		//scene.add( light2 );
+
+		light3 = new THREE.PointLight( 0xffffff, 1, 100, 2 );
+		light3.add( new THREE.Mesh( sphere, new THREE.MeshBasicMaterial( { color: 0xffffff } ) ) );
+		light3.position.set( -1, 1, 1 );
+		//scene.add( light3 );
+
+		light4 = new THREE.PointLight( 0xffaa00, 0.1, 100, 2 );
+		light4.add( new THREE.Mesh( sphere, new THREE.MeshBasicMaterial( { color: 0xffffff } ) ) );
+		light4.position.set( -5, 2, -5 );
+		//scene.add( light4 );
+				
+		//scene.add( bulbLight );
+	}
+
+	function addCamera()
+	{
+		camera = new PerspectiveCamera();
+		camera.position.set(2, 2, 2);
+		camera.lookAt(0, 0, 0);
+	}
+	
+	function init() {
+
+		scene = new Scene();
+		scene.background = new Color(0x263238);
+
+		renderer = new WebGLRenderer({ antialias: true });
+		renderer.outputEncoding = sRGBEncoding;
+		renderer.shadowMap.enabled = true;
+		renderer.shadowMap.type = PCFSoftShadowMap;
+		document.body.appendChild(renderer.domElement);
+
+		addLight();
+		addFloor();
+		addCamera();
+		/*
+		const ground = new Mesh(new PlaneBufferGeometry(), new ShadowMaterial({ opacity: 0.5 }));
+		ground.rotation.x = -Math.PI / 2;
+		ground.scale.setScalar(30);
+		ground.receiveShadow = true;
+		scene.add(ground);
+		*/
+
+		controls = new OrbitControls(camera, renderer.domElement);
+		controls.minDistance = 0.1;
+		controls.target.x = 1;
+		controls.target.y = 1.2;
+		controls.update();
+		controls.addEventListener( 'change', control_changed );
+
+		// Load robot
+		const manager = new LoadingManager();
+		const loader = new URDFLoader(manager);
+
+		//loader.load('../model/irb/abb_irb4600_40_255_obj.URDF', result => {
+		//loader.load('../model/abb_irb4600_40_255/urdf/abb_irb4600_40_255.URDF', result => {
+		loader.load('./model/effort/ER210-stl.urdf', result => {
+
+			robot = result;
+			//console.log(robot)
+
+		});
+
+		// wait until all the geometry has loaded to add the model to the scene
+		manager.onLoad = () => {
+
+			robot.rotation.x = -Math.PI / 2;
+			robot.traverse(c => {
+				c.castShadow = true;
+			});
+			for (let i = 1; i <= 6; i++) {
+					ang_i[i] = MathUtils.degToRad(0)
+					robot.joints[`joint_${ i }`].ignoreLimits = true;
+					robot.joints[`joint_${ i }`].setJointValue(					ang_i[i]);
+				}
+			robot.updateMatrixWorld(true);
+
+			//const bb = new Box3();
+			//bb.setFromObject(robot);
+
+			//robot.position.y -= bb.min.y;
+			robot.position.y = 0.7;
+			scene.add(robot);
+			renderer.render(scene, camera);
+		};
+
+		onResize();
+		window.addEventListener('resize', onResize);
+
+	}
+
+	function onResize() {
+
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		renderer.setPixelRatio(window.devicePixelRatio);
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+	}
+
+	function control_changed()
+	{
+		needrender = true;
+	}
+
+
+	var tnow,told;
+	var theta = 0;
+	var msg_count_1 = 0;
+	function render() {
+	
+		
+		
+		requestAnimationFrame(render);
+		if(testing && connected)ws.send("data");
+
+		if(needrender)
+		{
+			// msg_count--;
+			// theta = 0.001*Math.PI*msg_count;
+			// if(robot)
+			// {
+			// 	robot.joints['joint_1'].setJointValue(theta);
+			// }
+			renderer.render(scene, camera);
+			
+			// if(msg_count != msg_count_1)
+			// {
+			// 	console.log(msg_count);
+			// }
+			// msg_count_1 = msg_count;
+			needrender = false;
+			//msg_count--;
+		}
+
+		// if(msg_count<0)
+		// {
+		// 	console.log('msg_count=',msg_count);
+			
+		// }
+		//msg_count = 0;
+
+		// tnow = Date.now();
+		// var td = Date.now() - told;
+		// told = tnow;
+		// console.log('td='+td)
+		/*
+		loop_count++;
+		if(loop_count%10==0){
+			console.log("loop_count=" + loop_count.toString());
+		}
+		*/
+	}
+
+</script>
+</body>
+</html>

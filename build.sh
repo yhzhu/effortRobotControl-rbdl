@@ -1,0 +1,1 @@
+g++ -O2 -pthread -std=c++11 -Wno-unused-result -Wl,-rpath=./bin -I./include -I./wsserver -I/usr/include/eigen3/ -L./bin  main.c mytimer.c -ldynamics -lrbdl -lrbdl_urdfreader  -lws -o ./bin/hitexo
